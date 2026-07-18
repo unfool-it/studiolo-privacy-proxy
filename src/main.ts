@@ -1,4 +1,8 @@
-import express, { Request, Response } from 'express';
+/**
+ * FILE: src/main.ts
+ * Sovereign Ingestion Handler with Environment Validation.
+ */
+import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -12,46 +16,39 @@ const app = express();
 const proxy = new ProxyService();
 const utility = UtilityService.getInstance();
 const metrics = MetricsManager.getInstance();
+
 const PORT = process.env.PORT || 3000;
 const SALT = process.env.CRYPTO_SALT || 'default_sovereign_salt_32_chars';
+const UPSTREAM_URL = process.env.UPSTREAM_URL;
+
+if (!UPSTREAM_URL) {
+    console.error('[CRITICAL] UPSTREAM_URL is not defined. Terminating.');
+    process.exit(1);
+}
 
 app.use(helmet());
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',') || '*' }));
+app.use(express.json({ limit: '1mb' }));
 
-/**
- * System Telemetry Interface
- */
 app.get('/system/metrics', (_req: Request, res: Response) => {
     res.json(metrics.getSnapshot());
 });
 
-/**
- * Sovereign Ingestion Handler
- * Implements Identity Truncation and Recursive Redaction
- */
 app.post('/v1/ingest', async (req: Request, res: Response) => {
     const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-    const targetUrl = `${process.env.UPSTREAM_URL}/ingest`;
+    const targetUrl = `${UPSTREAM_URL}/ingest`;
 
     try {
-        // Phase 1: Privacy Transformation
-        const { anonymizedId, payload } = utility.processRequest(
-            ip, 
-            req.body, 
-            SALT, 
-            16 // Mask bits for K-Anonymity
-        );
+        const { anonymizedId, payload } = utility.processRequest(ip, req.body, SALT, 16);
 
-        // Phase 2: Secure Forwarding
         const response = await proxy.forward(
             targetUrl,
             'POST',
-            { ...req.headers, 'x-sovereign-id': anonymizedId },
+            { 'x-sovereign-id': anonymizedId },
             payload
         );
 
-        res.status(200).json({
+        res.status(response.status).json({
             status: 'sanitized',
             id: anonymizedId,
             payload: payload
