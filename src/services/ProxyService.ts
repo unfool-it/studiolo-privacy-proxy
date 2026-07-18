@@ -1,50 +1,41 @@
-import axios, { AxiosInstance } from 'axios';
-import http from 'http';
-import https from 'https';
-import { MetricsManager } from './MetricsManager';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import http from 'node:http';
+import https from 'node:https';
+import { MetricsManager } from './MetricsManager.js';
 
-/**
- * ProxyService: Handles resilient upstream requests with connection pooling.
- */
 export class ProxyService {
-    private client: AxiosInstance;
-    private metrics = MetricsManager.getInstance();
+  private readonly client: AxiosInstance;
+  private readonly metrics: MetricsManager = MetricsManager.getInstance();
 
-    constructor() {
-        const agentOptions = {
-            keepAlive: true,
-            maxSockets: 100,
-            maxFreeSockets: 10,
-            timeout: 60000,
-        };
+  constructor() {
+    this.client = axios.create({
+      httpAgent: new http.Agent({ keepAlive: true, maxSockets: 150 }),
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 150 }),
+      timeout: 5000,
+      validateStatus: (status) => status < 500
+    });
+  }
 
-        this.client = axios.create({
-            httpAgent: new http.Agent(agentOptions),
-            httpsAgent: new https.Agent(agentOptions),
-            validateStatus: () => true, // Handle all status codes at proxy level
-            responseType: 'arraybuffer'
-        });
+  public async forward(url: string, method: string, headers: Record<string, string>, data: unknown): Promise<AxiosResponse> {
+    const startTime: number = Date.now();
+    this.metrics.incrementRequests();
+
+    try {
+      const response = await this.client({
+        url,
+        method,
+        headers: { ...headers, 'x-proxy-agent': 'Zenith-Magister' },
+        data
+      });
+
+      if (response.data) {
+        this.metrics.recordBytesOut(Buffer.byteLength(JSON.stringify(response.data)));
+      }
+      
+      return response;
+    } catch (error) {
+      this.metrics.incrementErrors();
+      throw new Error(`Upstream Connection Failure: ${(error as Error).message}`);
     }
-
-    async forward(targetUrl: string, method: string, headers: any, data?: any) {
-        this.metrics.incrementRequests();
-        
-        try {
-            const start = Date.now();
-            if (data) this.metrics.recordBytesIn(JSON.stringify(data).length);
-
-            const response = await this.client({
-                url: targetUrl,
-                method,
-                headers,
-                data
-            });
-
-            this.metrics.recordBytesOut(response.data.byteLength);
-            return response;
-        } catch (error) {
-            this.metrics.incrementErrors();
-            throw error;
-        }
-    }
+  }
 }
