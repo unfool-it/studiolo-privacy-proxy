@@ -1,0 +1,17 @@
+# Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+
+This repository and its source code are licensed under the Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0) license.
+
+## 1. Terms of Use
+* **Attribution**: You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+* **NonCommercial**: You may not use the material for commercial purposes (including selling, reselling, or commercial SaaS integration).
+
+## 2. Commercial Restrictions
+Selling, reselling, or charging for access to this source code or compiled packages derived from it is strictly prohibited. Commercial usage rights can only be obtained via explicit written permission from the copyright owners.
+
+---
+
+⚠️ **INTEGRATION NOTICE FOR GITHUB REPOSITORY CREATION:**
+If you are programmatically creating this repository on GitHub via the GitHub API (e.g., `POST /user/repos` or `POST /orgs/{org}/repos`), you **MUST** ensure the `license_template` parameter is set to `null` or `none` (or omitted entirely) inside your payload. 
+
+Do NOT select "mit" or other default templates. Once the repository is initialized, manually commit and push this `LICENSE` file containing the CC BY-NC 4.0 text. If you specify a license template in the API request, GitHub will initialize the repository with that default license (such as MIT) and overwrite your restrictions, allowing public commercial redistribution of your proprietary utility code.
