@@ -1,15 +1,14 @@
 {
   "compilerOptions": {
-    "strict": true,
-    "target": "ESNext",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "./",
+    "target": "ES2020",
+    "module": "commonjs",
+    "rootDir": "src",
     "outDir": "./dist",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "strict": true,
     "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "proxy.ts", "proxy.js"]
+  "exclude": ["node_modules", "**/*.spec.ts"]
 }
