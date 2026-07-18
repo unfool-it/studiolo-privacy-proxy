@@ -1,22 +1,19 @@
 import { PrivacyEngine } from '../utils/security.js';
+import { MetricsManager } from './MetricsManager.js';
 
 export interface ProcessedResult {
   anonymizedId: string;
   payload: any;
 }
 
+/**
+ * UtilityService: Orchestrates the PrivacyEngine within the request lifecycle.
+ */
 export class UtilityService {
   private static instance: UtilityService;
-  private readonly telemetryBuffer: SharedArrayBuffer;
-  private readonly countView: Int32Array;
-  private readonly bytesView: BigUint64Array;
+  private metrics = MetricsManager.getInstance();
 
-  private constructor() {
-    // 64-byte allocation for atomic metrics
-    this.telemetryBuffer = new SharedArrayBuffer(64);
-    this.countView = new Int32Array(this.telemetryBuffer, 0, 1);
-    this.bytesView = new BigUint64Array(this.telemetryBuffer, 8, 1);
-  }
+  private constructor() {}
 
   public static getInstance(): UtilityService {
     if (!UtilityService.instance) {
@@ -25,22 +22,17 @@ export class UtilityService {
     return UtilityService.instance;
   }
 
+  /**
+   * Transforms raw ingress into sanitized egress.
+   */
   public processRequest(ip: string, payload: any, salt: string, mask: number): ProcessedResult {
     const anonymizedId = PrivacyEngine.hashIP(ip, salt, mask);
     const scrubbed = PrivacyEngine.scrubPayload(payload);
 
-    // Update Telemetry
-    Atomics.add(this.countView, 0, 1);
-    const payloadSize = BigInt(Buffer.byteLength(JSON.stringify(scrubbed)));
-    Atomics.add(this.bytesView, 0, payloadSize);
+    // Synchronize telemetry with MetricsManager
+    const payloadSize = Buffer.byteLength(JSON.stringify(scrubbed));
+    this.metrics.recordBytesIn(payloadSize);
 
     return { anonymizedId, payload: scrubbed };
-  }
-
-  public getMetrics() {
-    return {
-      requestCount: Atomics.load(this.countView, 0),
-      totalBytesScrubbed: Atomics.load(this.bytesView, 0).toString()
-    };
   }
 }
