@@ -1,9 +1,12 @@
+// studiolo-privacy-proxy-main/package.json
 {
   "name": "studiolo-privacy-proxy",
   "version": "1.1.0",
   "description": "Stateless Privacy-by-Design Ingestion Proxy",
-  "main": "dist/main.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
