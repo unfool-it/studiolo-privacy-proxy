@@ -1,17 +1,18 @@
 import { PrivacyEngine } from '../utils/security.js';
-import { ConfigLoader } from '../config/index.js';
 
-/**
- * UtilityService: Manages high-performance telemetry and processing.
- */
+export interface ProcessedResult {
+  anonymizedId: string;
+  payload: any;
+}
+
 export class UtilityService {
   private static instance: UtilityService;
-  private telemetryBuffer: SharedArrayBuffer;
-  private countView: Int32Array;
-  private bytesView: BigUint64Array;
+  private readonly telemetryBuffer: SharedArrayBuffer;
+  private readonly countView: Int32Array;
+  private readonly bytesView: BigUint64Array;
 
   private constructor() {
-    // Allocation: 0-3: Requests (Int32), 8-15: Bytes (BigUint64)
+    // 64-byte allocation for atomic metrics
     this.telemetryBuffer = new SharedArrayBuffer(64);
     this.countView = new Int32Array(this.telemetryBuffer, 0, 1);
     this.bytesView = new BigUint64Array(this.telemetryBuffer, 8, 1);
@@ -24,16 +25,14 @@ export class UtilityService {
     return UtilityService.instance;
   }
 
-  public processRequest(ip: string, payload: any): { anonymizedId: string; payload: any } {
-    const config = ConfigLoader.getInstance().getConfig();
-    const anonymizedId = PrivacyEngine.hashIP(ip, config.salt, config.maskBits);
+  public processRequest(ip: string, payload: any, salt: string, mask: number): ProcessedResult {
+    const anonymizedId = PrivacyEngine.hashIP(ip, salt, mask);
     const scrubbed = PrivacyEngine.scrubPayload(payload);
 
-    const payloadLength = BigInt(JSON.stringify(scrubbed).length);
-    
-    // Atomic operations prevent race conditions in high-concurrency environments
+    // Update Telemetry
     Atomics.add(this.countView, 0, 1);
-    Atomics.add(this.bytesView, 0, payloadLength);
+    const payloadSize = BigInt(Buffer.byteLength(JSON.stringify(scrubbed)));
+    Atomics.add(this.bytesView, 0, payloadSize);
 
     return { anonymizedId, payload: scrubbed };
   }
