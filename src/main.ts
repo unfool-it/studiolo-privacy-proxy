@@ -1,51 +1,70 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { ProxyService } from './services/ProxyService';
-import { MetricsManager } from './services/MetricsManager';
-import { applySecurityHeaders } from './utils/security';
+import { ProxyService } from './services/ProxyService.js';
+import { UtilityService } from './services/UtilityService.js';
+import { MetricsManager } from './services/MetricsManager.js';
 
 dotenv.config();
 
 const app = express();
 const proxy = new ProxyService();
+const utility = UtilityService.getInstance();
 const metrics = MetricsManager.getInstance();
 const PORT = process.env.PORT || 3000;
+const SALT = process.env.CRYPTO_SALT || 'default_sovereign_salt_32_chars';
 
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Metrics Endpoint
-app.get('/system/metrics', (req, res) => {
+/**
+ * System Telemetry Interface
+ */
+app.get('/system/metrics', (_req: Request, res: Response) => {
     res.json(metrics.getSnapshot());
 });
 
-// Primary Proxy Handler
-app.all('/v1/*', async (req, res) => {
-    const targetPath = req.params[0];
-    const targetUrl = `${process.env.UPSTREAM_URL}/${targetPath}`;
+/**
+ * Sovereign Ingestion Handler
+ * Implements Identity Truncation and Recursive Redaction
+ */
+app.post('/v1/ingest', async (req: Request, res: Response) => {
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const targetUrl = `${process.env.UPSTREAM_URL}/ingest`;
 
     try {
-        const response = await proxy.forward(
-            targetUrl,
-            req.method,
-            req.headers,
-            req.body
+        // Phase 1: Privacy Transformation
+        const { anonymizedId, payload } = utility.processRequest(
+            ip, 
+            req.body, 
+            SALT, 
+            16 // Mask bits for K-Anonymity
         );
 
-        // Strip sensitive upstream headers
-        const safeHeaders = { ...response.headers };
-        delete safeHeaders['content-encoding'];
-        delete safeHeaders['transfer-encoding'];
+        // Phase 2: Secure Forwarding
+        const response = await proxy.forward(
+            targetUrl,
+            'POST',
+            { ...req.headers, 'x-sovereign-id': anonymizedId },
+            payload
+        );
 
-        res.status(response.status).set(safeHeaders).send(response.data);
+        res.status(200).json({
+            status: 'sanitized',
+            id: anonymizedId,
+            payload: payload
+        });
     } catch (error: any) {
-        res.status(502).json({ error: 'Upstream Unreachable', detail: error.message });
+        metrics.incrementErrors();
+        res.status(502).json({ 
+            error: 'Upstream Isolation Failure', 
+            detail: error.message 
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Magister Proxy Operational on Port ${PORT}`);
+    console.log(`[ZENITH] Magister Proxy Operational on Port ${PORT}`);
 });
